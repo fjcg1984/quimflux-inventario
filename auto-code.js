@@ -30,7 +30,7 @@
 
     let best=null;
     candidates.forEach(code=>{
-      const match=code.match(new RegExp('^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([-_/ ]?)(\\d+)$'));
+      const match=code.match(new RegExp('^'+prefix.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+'([-_/ ]?)(\\d+)$'));
       if(!match)return;
       const number=Number(match[2]);
       if(!Number.isFinite(number))return;
@@ -59,14 +59,14 @@
       code.title='Código manual para esta categoría';
       code.style.background='';
       code.style.cursor='';
-      if(label)label.textContent='Código *';
+      if(label && label.textContent!=='Código *')label.textContent='Código *';
       if(lastCategory!==category.value){
         code.value='';
         lastCategory=category.value;
       }
-      if(!category.dataset.manualCodeListener){
-        category.dataset.manualCodeListener='1';
-        category.addEventListener('change',()=>apply());
+      if(!category.dataset.codeListener){
+        category.dataset.codeListener='1';
+        category.addEventListener('change',apply);
       }
       return;
     }
@@ -77,10 +77,12 @@
       code.title='Código generado automáticamente según la categoría';
       code.style.background='#f3f4f6';
       code.style.cursor='not-allowed';
-      if(label)label.innerHTML='Código * <span style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
-      if(!category.dataset.autoCodeListener){
-        category.dataset.autoCodeListener='1';
-        category.addEventListener('change',()=>apply());
+      if(label && !label.querySelector('[data-auto-label]')){
+        label.innerHTML='Código * <span data-auto-label style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
+      }
+      if(!category.dataset.codeListener){
+        category.dataset.codeListener='1';
+        category.addEventListener('change',apply);
       }
     }
 
