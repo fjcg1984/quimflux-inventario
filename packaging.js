@@ -3,120 +3,33 @@
   const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const fmt=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:3});
   let timer=null, rendering=false;
-
   function itemById(id){return(typeof state!=='undefined'?state.items:[]).find(i=>i.id===id)}
   function presentation(i){return String(i?.presentation||i?.unit||'UND').trim().toUpperCase()}
   function factor(i){const n=Number(i?.units_per_presentation);return Number.isFinite(n)&&n>0?n:1}
   function baseUnit(i){return String(i?.unit||'UND').trim().toUpperCase()}
-
   function renderInventoryTable(){
     if(typeof state==='undefined'||state.view!=='overview'||rendering)return;
-    const body=document.querySelector('#body'),table=body?.closest('table');
-    if(!body||!table)return;
+    const body=document.querySelector('#body'),table=body?.closest('table');if(!body||!table)return;
     const q=document.querySelector('#q'),cat=document.querySelector('#cat'),st=document.querySelector('#st');
-    const query=(q?.value||'').trim().toLowerCase(), category=cat?.value||'', status=st?.value||'';
-    const rows=(state.items||[]).filter(i=>{
-      const text=`${i.code||''} ${i.name||''} ${i.description||''}`.toLowerCase();
-      return(!query||text.includes(query))&&(!category||String(i.category_id)===String(category))&&(!status||String(i.stock_status)===String(status));
-    });
-    const count=document.querySelector('#count');
-    if(count)count.textContent=`${rows.length} artículo${rows.length===1?'':'s'}`;
-
+    const query=(q?.value||'').trim().toLowerCase(),category=cat?.value||'',status=st?.value||'';
+    const rows=(state.items||[]).filter(i=>{const text=`${i.code||''} ${i.name||''} ${i.description||''}`.toLowerCase();return(!query||text.includes(query))&&(!category||String(i.category_id)===String(category))&&(!status||String(i.stock_status)===String(status))});
+    const count=document.querySelector('#count');if(count)count.textContent=`${rows.length} artículo${rows.length===1?'':'s'}`;
     rendering=true;
     const head=table.querySelector('thead tr');
-    if(head){
-      head.innerHTML='<th>Código</th><th>Categoría</th><th>Bien</th><th>Unidad de medida</th><th>Cantidad por presentación</th><th>Cantidad</th><th>Cantidad total</th><th>Mínimo</th><th>Estado</th><th>Acciones</th>';
-    }
+    if(head)head.innerHTML='<th>Código</th><th>Categoría</th><th>Bien</th><th>Unidad de medida</th><th>Cantidad por presentación</th><th>Cantidad</th><th>Cantidad total</th><th>Mínimo</th><th>Estado</th><th>Acciones</th>';
     body.innerHTML=rows.length?rows.map(i=>{
       const f=factor(i),p=presentation(i),u=baseUnit(i),stock=Number(i.current_stock||0),qty=f?stock/f:stock;
-      return `<tr>
-        <td><b>${esc(i.code)}</b></td>
-        <td>${esc(i.category_name)}</td>
-        <td>${esc(i.name)}</td>
-        <td>${esc(u)}</td>
-        <td><div class="presentation-editor"><input class="form-control packaging-factor-input" data-item-id="${esc(i.id)}" type="number" min="0.001" step="0.001" value="${esc(f)}" title="Cantidad de ${esc(u)} que contiene 1 ${esc(p)}"><div class="sub">1 ${esc(p)} = ${fmt(f)} ${esc(u)}</div></div></td>
-        <td><b>${fmt(qty)}</b> <span class="sub">${esc(p)}</span></td>
-        <td><b>${fmt(qty*f)}</b> <span class="sub">${esc(u)}</span></td>
-        <td>${fmt(i.minimum_stock)}</td>
-        <td><span class="badge ${({SUFFICIENT:'ok',LOW:'low',CRITICAL:'critical'}[i.stock_status]||'ok')}">${({SUFFICIENT:'Suficiente',LOW:'Stock bajo',CRITICAL:'Reponer'}[i.stock_status]||i.stock_status)}</span></td>
-        <td class="actions-placeholder"></td>
-      </tr>`;
+      return `<tr><td><b>${esc(i.code)}</b></td><td>${esc(i.category_name)}</td><td>${esc(i.name)}</td><td>${esc(u)}</td><td><div class="presentation-editor"><input class="form-control packaging-factor-input" data-item-id="${esc(i.id)}" type="number" min="0.001" step="0.001" value="${esc(f)}" title="Cantidad de ${esc(u)} que contiene 1 ${esc(p)}"><div class="sub">1 ${esc(p)} = ${fmt(f)} ${esc(u)}</div></div></td><td><b>${fmt(qty)}</b> <span class="sub">${esc(p)}</span></td><td><b>${fmt(qty*f)}</b> <span class="sub">${esc(u)}</span></td><td>${fmt(i.minimum_stock)}</td><td><span class="badge ${({SUFFICIENT:'ok',LOW:'low',CRITICAL:'critical'}[i.stock_status]||'ok')}">${({SUFFICIENT:'Suficiente',LOW:'Stock bajo',CRITICAL:'Reponer'}[i.stock_status]||i.stock_status)}</span></td></tr>`;
     }).join(''):`<tr><td colspan="10"><div class="empty"><strong>No hay resultados</strong>Ajusta los filtros o crea un artículo nuevo.</div></td></tr>`;
-    rendering=false;
-    bindFactorInputs();
+    rendering=false;bindFactorInputs();
   }
-
-  function bindFactorInputs(){
-    document.querySelectorAll('.packaging-factor-input').forEach(input=>{
-      if(input.dataset.bound)return;
-      input.dataset.bound='1';
-      input.addEventListener('change',async()=>{
-        const item=itemById(input.dataset.itemId); if(item)await saveFactor(item,input);
-      });
-      input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}});
-    });
-  }
-
-  async function saveFactor(item,input){
-    const value=Number(input.value),old=factor(item);
-    if(!Number.isFinite(value)||value<=0){input.value=old;toast('La cantidad por presentación debe ser mayor que 0.',true);return}
-    if(value===old)return;
-    input.disabled=true;
-    const {error}=await sb.from('items').update({units_per_presentation:value,updated_at:new Date().toISOString()}).eq('id',item.id);
-    input.disabled=false;
-    if(error){input.value=old;toast(error.message,true);return}
-    item.units_per_presentation=value;
-    toast(`Presentación actualizada: 1 ${presentation(item)} = ${fmt(value)} ${baseUnit(item)}`);
-    renderInventoryTable();
-  }
-
-  function enhanceNewItem(){
-    const form=document.querySelector('#item-form');
-    if(!form||form.dataset.packagingReady)return;
-    form.dataset.packagingReady='1';
-    const grid=form.querySelector('.form-grid'),unit=grid?.querySelector('[name="unit"]')?.closest('.field');
-    if(!grid||!unit)return;
-    const wrap=document.createElement('div');wrap.className='field';wrap.innerHTML='<label>Presentación</label><input class="form-control" name="presentation" value="UND" placeholder="PAQUETE, CAJA, BOLSA...">';unit.insertAdjacentElement('afterend',wrap);
-    const fw=document.createElement('div');fw.className='field';fw.innerHTML='<label>Cantidad por presentación</label><input class="form-control" name="units_per_presentation" type="number" min="0.001" step="0.001" value="1"><div class="sub">Ej.: 1 PAQUETE = 10 UNIDADES</div>';wrap.insertAdjacentElement('afterend',fw);
-    form.onsubmit=createItemWithPackaging;
-  }
-
-  async function createItemWithPackaging(e){
-    e.preventDefault();const f=new FormData(e.target),initial=Number(f.get('initial')||0),unitsPer=Number(f.get('units_per_presentation')||1);
-    const unit=String(f.get('unit')||'UND').trim().toUpperCase()||'UND',p=String(f.get('presentation')||unit).trim().toUpperCase()||unit;
-    if(!Number.isFinite(unitsPer)||unitsPer<=0){toast('La cantidad por presentación debe ser mayor que 0.',true);return}
-    const {data,error}=await sb.from('items').insert({code:String(f.get('code')||'').trim().toUpperCase(),category_id:f.get('category_id'),name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim()||null,unit,current_stock:0,minimum_stock:Number(f.get('minimum')||0),presentation:p,units_per_presentation:unitsPer}).select().single();
-    if(error){toast(error.message,true);return}
-    if(initial>0){const {error:me}=await sb.from('movements').insert({item_id:data.id,movement_type:'ENTRY',quantity:initial,presentation:p,presentation_quantity:Number((initial/unitsPer).toFixed(3)),conversion_factor:unitsPer,notes:'Stock inicial'});if(me){toast(me.message,true);return}}
-    closeModal();await load();view();toast('Artículo creado correctamente');
-  }
-
-  function enhanceMovement(){
-    const form=document.querySelector('#movement-form');if(!form||form.dataset.packagingReady)return;
-    form.dataset.packagingReady='1';const sel=form.querySelector('[name="item_id"]'),qty=form.querySelector('[name="quantity"]');if(!sel||!qty)return;
-    const qf=qty.closest('.field'),wrap=document.createElement('div');wrap.className='field';wrap.innerHTML='<label>Presentación *</label><select class="form-control" name="presentation_choice"></select><div id="conversion-help" class="sub" style="margin-top:5px"></div>';qf.insertAdjacentElement('beforebegin',wrap);
-    const refresh=()=>{const i=itemById(sel.value),s=form.querySelector('[name="presentation_choice"]');if(!i||!s)return;const p=presentation(i),u=baseUnit(i),f=factor(i);s.innerHTML=`<option value="${esc(p)}">${esc(p)}${f!==1?' — '+fmt(f)+' '+esc(u):''}</option>${f!==1?`<option value="${esc(u)}">${esc(u)} — 1 ${esc(u)}</option>`:''}`;updateHelp()};
-    const updateHelp=()=>{const i=itemById(sel.value),s=form.querySelector('[name="presentation_choice"]'),h=form.querySelector('#conversion-help');if(!i||!s||!h)return;const chosen=s.value,p=presentation(i),f=factor(i),n=Number(qty.value||0),cf=chosen===p?f:1;h.textContent=`${fmt(n)} ${chosen} = ${fmt(n*cf)} ${baseUnit(i)}`};
-    sel.addEventListener('change',refresh);qty.addEventListener('input',updateHelp);form.querySelector('[name="presentation_choice"]').addEventListener('change',updateHelp);refresh();
-    form.onsubmit=e=>saveMovementWithPackaging(e,form.closest('#content')?.querySelector('h2')?.textContent?.toLowerCase().includes('entrada')?'ENTRY':'EXIT');
-  }
-
-  async function saveMovementWithPackaging(e,type){
-    e.preventDefault();const f=new FormData(e.target),item=itemById(f.get('item_id')),qty=Number(f.get('quantity')),chosen=String(f.get('presentation_choice')||'');
-    if(!item||!Number.isFinite(qty)||qty<=0){toast('Selecciona un artículo e indica una cantidad válida.',true);return}
-    const p=presentation(item),base=baseUnit(item),units=factor(item),cf=chosen===p?units:1,baseQty=Number((qty*cf).toFixed(3));
-    if(type==='EXIT'&&baseQty>Number(item.current_stock)){toast(`Stock insuficiente. Disponible: ${fmt(item.current_stock)} ${base}`,true);return}
-    const payload={item_id:item.id,movement_type:type,quantity:baseQty,movement_date:new Date(f.get('date')).toISOString(),presentation:chosen,presentation_quantity:qty,conversion_factor:cf,notes:f.get('notes')||null};
-    if(type==='ENTRY'){payload.supplier=f.get('supplier')||null;payload.document_number=f.get('document')||null}else{payload.destination=f.get('destination')||null;payload.responsible=f.get('responsible')||null}
-    const {error}=await sb.from('movements').insert(payload);if(error){toast(error.message,true);return}await load();view();toast(`${type==='ENTRY'?'Entrada':'Salida'} registrada: ${fmt(qty)} ${chosen} = ${fmt(baseQty)} ${base}`);
-  }
-
-  function enhanceMovements(){
-    if(typeof state==='undefined'||state.view!=='movements')return;
-    const body=document.querySelector('.panel tbody'),rows=state.movements||[];if(!body)return;
-    [...body.querySelectorAll('tr')].forEach((row,idx)=>{const m=rows[idx];if(!m||row.querySelector('.packaging-movement')||row.querySelector('.empty'))return;const cell=row.children[4];if(!cell)return;const q=Number(m.presentation_quantity),p=m.presentation,f=Number(m.conversion_factor||1),base=Number(m.quantity);if(p&&q&&f!==1)cell.innerHTML=`<b>${fmt(q)} ${esc(p)}</b><div class="sub packaging-movement">= ${fmt(base)} ${esc(itemById(m.item_id)?.unit||'UND')}</div>`});
-  }
-
+  function bindFactorInputs(){document.querySelectorAll('.packaging-factor-input').forEach(input=>{if(input.dataset.bound)return;input.dataset.bound='1';input.addEventListener('change',async()=>{const item=itemById(input.dataset.itemId);if(item)await saveFactor(item,input)});input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}})})}
+  async function saveFactor(item,input){const value=Number(input.value),old=factor(item);if(!Number.isFinite(value)||value<=0){input.value=old;toast('La cantidad por presentación debe ser mayor que 0.',true);return}if(value===old)return;input.disabled=true;const {error}=await sb.from('items').update({units_per_presentation:value,updated_at:new Date().toISOString()}).eq('id',item.id);input.disabled=false;if(error){input.value=old;toast(error.message,true);return}item.units_per_presentation=value;toast(`Presentación actualizada: 1 ${presentation(item)} = ${fmt(value)} ${baseUnit(item)}`);renderInventoryTable()}
+  function enhanceNewItem(){const form=document.querySelector('#item-form');if(!form||form.dataset.packagingReady)return;form.dataset.packagingReady='1';const grid=form.querySelector('.form-grid'),unit=grid?.querySelector('[name="unit"]')?.closest('.field');if(!grid||!unit)return;const wrap=document.createElement('div');wrap.className='field';wrap.innerHTML='<label>Presentación</label><input class="form-control" name="presentation" value="UND" placeholder="PAQUETE, CAJA, BOLSA...">';unit.insertAdjacentElement('afterend',wrap);const fw=document.createElement('div');fw.className='field';fw.innerHTML='<label>Cantidad por presentación</label><input class="form-control" name="units_per_presentation" type="number" min="0.001" step="0.001" value="1"><div class="sub">Ej.: 1 PAQUETE = 10 UNIDADES</div>';wrap.insertAdjacentElement('afterend',fw);form.onsubmit=createItemWithPackaging}
+  async function createItemWithPackaging(e){e.preventDefault();const f=new FormData(e.target),initial=Number(f.get('initial')||0),unitsPer=Number(f.get('units_per_presentation')||1),unit=String(f.get('unit')||'UND').trim().toUpperCase()||'UND',p=String(f.get('presentation')||unit).trim().toUpperCase()||unit;if(!Number.isFinite(unitsPer)||unitsPer<=0){toast('La cantidad por presentación debe ser mayor que 0.',true);return}const {data,error}=await sb.from('items').insert({code:String(f.get('code')||'').trim().toUpperCase(),category_id:f.get('category_id'),name:String(f.get('name')||'').trim(),description:String(f.get('description')||'').trim()||null,unit,current_stock:0,minimum_stock:Number(f.get('minimum')||0),presentation:p,units_per_presentation:unitsPer}).select().single();if(error){toast(error.message,true);return}if(initial>0){const {error:me}=await sb.from('movements').insert({item_id:data.id,movement_type:'ENTRY',quantity:initial,presentation:p,presentation_quantity:Number((initial/unitsPer).toFixed(3)),conversion_factor:unitsPer,notes:'Stock inicial'});if(me){toast(me.message,true);return}}closeModal();await load();view();toast('Artículo creado correctamente')}
+  function enhanceMovement(){const form=document.querySelector('#movement-form');if(!form||form.dataset.packagingReady)return;form.dataset.packagingReady='1';const sel=form.querySelector('[name="item_id"]'),qty=form.querySelector('[name="quantity"]');if(!sel||!qty)return;const qf=qty.closest('.field'),wrap=document.createElement('div');wrap.className='field';wrap.innerHTML='<label>Presentación *</label><select class="form-control" name="presentation_choice"></select><div id="conversion-help" class="sub" style="margin-top:5px"></div>';qf.insertAdjacentElement('beforebegin',wrap);const refresh=()=>{const i=itemById(sel.value),s=form.querySelector('[name="presentation_choice"]');if(!i||!s)return;const p=presentation(i),u=baseUnit(i),f=factor(i);s.innerHTML=`<option value="${esc(p)}">${esc(p)}${f!==1?' — '+fmt(f)+' '+esc(u):''}</option>${f!==1?`<option value="${esc(u)}">${esc(u)} — 1 ${esc(u)}</option>`:''}`;updateHelp()};const updateHelp=()=>{const i=itemById(sel.value),s=form.querySelector('[name="presentation_choice"]'),h=form.querySelector('#conversion-help');if(!i||!s||!h)return;const chosen=s.value,p=presentation(i),f=factor(i),n=Number(qty.value||0),cf=chosen===p?f:1;h.textContent=`${fmt(n)} ${chosen} = ${fmt(n*cf)} ${baseUnit(i)}`};sel.addEventListener('change',refresh);qty.addEventListener('input',updateHelp);form.querySelector('[name="presentation_choice"]').addEventListener('change',updateHelp);refresh();form.onsubmit=e=>saveMovementWithPackaging(e,form.closest('#content')?.querySelector('h2')?.textContent?.toLowerCase().includes('entrada')?'ENTRY':'EXIT')}
+  async function saveMovementWithPackaging(e,type){e.preventDefault();const f=new FormData(e.target),item=itemById(f.get('item_id')),qty=Number(f.get('quantity')),chosen=String(f.get('presentation_choice')||'');if(!item||!Number.isFinite(qty)||qty<=0){toast('Selecciona un artículo e indica una cantidad válida.',true);return}const p=presentation(item),base=baseUnit(item),units=factor(item),cf=chosen===p?units:1,baseQty=Number((qty*cf).toFixed(3));if(type==='EXIT'&&baseQty>Number(item.current_stock)){toast(`Stock insuficiente. Disponible: ${fmt(item.current_stock)} ${base}`,true);return}const payload={item_id:item.id,movement_type:type,quantity:baseQty,movement_date:new Date(f.get('date')).toISOString(),presentation:chosen,presentation_quantity:qty,conversion_factor:cf,notes:f.get('notes')||null};if(type==='ENTRY'){payload.supplier=f.get('supplier')||null;payload.document_number=f.get('document')||null}else{payload.destination=f.get('destination')||null;payload.responsible=f.get('responsible')||null}const {error}=await sb.from('movements').insert(payload);if(error){toast(error.message,true);return}await load();view();toast(`${type==='ENTRY'?'Entrada':'Salida'} registrada: ${fmt(qty)} ${chosen} = ${fmt(baseQty)} ${base}`)}
+  function enhanceMovements(){if(typeof state==='undefined'||state.view!=='movements')return;const body=document.querySelector('.panel tbody'),rows=state.movements||[];if(!body)return;[...body.querySelectorAll('tr')].forEach((row,idx)=>{const m=rows[idx];if(!m||row.querySelector('.packaging-movement')||row.querySelector('.empty'))return;const cell=row.children[4];if(!cell)return;const q=Number(m.presentation_quantity),p=m.presentation,f=Number(m.conversion_factor||1),base=Number(m.quantity);if(p&&q&&f!==1)cell.innerHTML=`<b>${fmt(q)} ${esc(p)}</b><div class="sub packaging-movement">= ${fmt(base)} ${esc(itemById(m.item_id)?.unit||'UND')}</div>`})}
   function run(){enhanceNewItem();enhanceMovement();if(typeof state!=='undefined'&&state.view==='overview')renderInventoryTable();enhanceMovements()}
   window.renderInventoryTable=renderInventoryTable;
   const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(run,60)});observer.observe(document.body,{childList:true,subtree:true});setInterval(run,800);
