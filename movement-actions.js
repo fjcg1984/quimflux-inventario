@@ -12,7 +12,6 @@
   },100);
 
   function enhance(){
-    const path=location.pathname;
     enhanceMovementForm();
     enhanceHistory();
   }
@@ -25,7 +24,6 @@
     if(!select)return;
     const field=select.closest('.field');
     if(!field)return;
-    const label=field.querySelector('label');
     const search=document.createElement('input');
     search.className='form-control movement-search';
     search.placeholder='🔎 Buscar por código o nombre...';
@@ -70,7 +68,7 @@
     const itemName=cells[3]?.textContent.trim();
     const date=cells[0]?.textContent.trim();
     const type=cells[1]?.textContent.includes('ENTRADA')?'ENTRY':'EXIT';
-    const movement=state.movements.find(m=>m.id && m.items?.code===code && m.items?.name===itemName && new Date(m.movement_date).toLocaleString('es-PE')===date) || state.movements.find(m=>m.id && m.items?.code===code && m.movement_type===type);
+    const movement=state.movements.find(m=>m.id && m.items?.code===code && m.items?.name===itemName && limaDisplay(m.movement_date)===date) || state.movements.find(m=>m.id && m.items?.code===code && m.movement_type===type);
     if(!movement)return;
     row.dataset.actionEnhanced='1';
     row.dataset.searchText=row.textContent.toLowerCase();
@@ -94,11 +92,11 @@
   function editMovement(m){
     const item=state.items.find(i=>i.id===m.item_id);
     if(!item){toast('No se encontró el artículo del movimiento',true);return;}
-    const dt=new Date(m.movement_date); const local=new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    const local=limaInputFromISO(m.movement_date);
     const detail=m.movement_type==='ENTRY'
       ? `<div class="field"><label>Proveedor</label><input class="form-control" name="supplier" value="${esc(m.supplier||'')}"></div><div class="field"><label>Documento</label><input class="form-control" name="document" value="${esc(m.document_number||'')}"></div>`
       : `<div class="field"><label>Destino</label><input class="form-control" name="destination" value="${esc(m.destination||'')}"></div><div class="field"><label>Responsable</label><input class="form-control" name="responsible" value="${esc(m.responsible||'')}"></div>`;
-    $('#modal-content').innerHTML=`<h2>Editar ${m.movement_type==='ENTRY'?'entrada':'salida'}</h2><p class="modal-sub">Puedes corregir la cantidad y los datos del movimiento. El stock se recalcula automáticamente.</p><form id="edit-movement-form"><div class="form-grid"><div class="field full"><label>Artículo</label><input class="form-control" value="${esc(m.items?.code||item.code)} — ${esc(m.items?.name||item.name)}" disabled></div><div class="field"><label>Cantidad *</label><input class="form-control" name="quantity" type="number" min="0.001" step="0.001" value="${Number(m.quantity)}" required></div><div class="field"><label>Fecha</label><input class="form-control" name="date" type="datetime-local" value="${local}"></div>${detail}<div class="field full"><label>Observación</label><textarea class="form-control" name="notes" rows="3">${esc(m.notes||'')}</textarea></div></div><div class="form-actions"><button type="button" class="btn btn-secondary" id="cancel-edit-movement">Cancelar</button><button class="btn btn-primary">Guardar cambios</button></div></form>`;
+    $('#modal-content').innerHTML=`<h2>Editar ${m.movement_type==='ENTRY'?'entrada':'salida'}</h2><p class="modal-sub">Puedes corregir la cantidad y los datos del movimiento. El stock se recalcula automáticamente.</p><form id="edit-movement-form"><div class="form-grid"><div class="field full"><label>Artículo</label><input class="form-control" value="${esc(m.items?.code||item.code)} — ${esc(m.items?.name||item.name)}" disabled></div><div class="field"><label>Cantidad *</label><input class="form-control" name="quantity" type="number" min="0.001" step="0.001" value="${Number(m.quantity)}" required></div><div class="field"><label>Fecha y hora (Lima)</label><input class="form-control" name="date" type="datetime-local" value="${local}"></div>${detail}<div class="field full"><label>Observación</label><textarea class="form-control" name="notes" rows="3">${esc(m.notes||'')}</textarea></div></div><div class="form-actions"><button type="button" class="btn btn-secondary" id="cancel-edit-movement">Cancelar</button><button class="btn btn-primary">Guardar cambios</button></div></form>`;
     openModal();
     $('#cancel-edit-movement').onclick=closeModal;
     $('#edit-movement-form').onsubmit=async e=>{
@@ -106,7 +104,7 @@
       const f=new FormData(e.target),qty=Number(f.get('quantity'));
       if(!Number.isFinite(qty)||qty<=0){toast('La cantidad debe ser mayor que cero',true);return;}
       if(m.movement_type==='EXIT' && qty>Number(item.current_stock)+Number(m.quantity)){toast(`Stock insuficiente para la nueva salida. Disponible máximo: ${fmt(Number(item.current_stock)+Number(m.quantity))} ${item.unit}`,true);return;}
-      const patch={quantity:qty,movement_date:new Date(f.get('date')).toISOString(),notes:f.get('notes')||null};
+      const patch={quantity:qty,movement_date:limaInputToISO(f.get('date')),notes:f.get('notes')||null};
       if(m.movement_type==='ENTRY'){patch.supplier=f.get('supplier')||null;patch.document_number=f.get('document')||null;}
       else{patch.destination=f.get('destination')||null;patch.responsible=f.get('responsible')||null;}
       const {error}=await sb.from('movements').update(patch).eq('id',m.id);
