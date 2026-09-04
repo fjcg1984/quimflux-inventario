@@ -2,13 +2,21 @@
 (function(){
   let observerStarted=false;
   let lastCategory='';
+  const MANUAL_CATEGORIES=['CRIS','CRI','COPELAS','COP','ESCORIFICADORES','ESC'];
 
-  function escLocal(v){
-    return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+  function categoryInfo(categoryId){
+    return (state.categories||[]).find(c=>String(c.id)===String(categoryId));
+  }
+
+  function isManualCategory(categoryId){
+    const cat=categoryInfo(categoryId);
+    const code=String(cat?.code||'').trim().toUpperCase();
+    const name=String(cat?.name||'').trim().toUpperCase();
+    return MANUAL_CATEGORIES.some(x=>code===x||name===x||name.includes(x));
   }
 
   function categoryCode(categoryId){
-    const cat=(state.categories||[]).find(c=>String(c.id)===String(categoryId));
+    const cat=categoryInfo(categoryId);
     return String(cat?.code||'').trim().toUpperCase();
   }
 
@@ -42,15 +50,38 @@
     const code=form.querySelector('[name="code"]');
     if(!category || !code)return;
 
+    const manual=isManualCategory(category.value);
+    const label=code.closest('.field')?.querySelector('label');
+
+    if(manual){
+      code.dataset.autoCode='0';
+      code.readOnly=false;
+      code.title='Código manual para esta categoría';
+      code.style.background='';
+      code.style.cursor='';
+      if(label)label.textContent='Código *';
+      if(lastCategory!==category.value){
+        code.value='';
+        lastCategory=category.value;
+      }
+      if(!category.dataset.manualCodeListener){
+        category.dataset.manualCodeListener='1';
+        category.addEventListener('change',()=>apply());
+      }
+      return;
+    }
+
     if(code.dataset.autoCode!=='1'){
       code.dataset.autoCode='1';
       code.readOnly=true;
       code.title='Código generado automáticamente según la categoría';
       code.style.background='#f3f4f6';
       code.style.cursor='not-allowed';
-      const label=code.closest('.field')?.querySelector('label');
       if(label)label.innerHTML='Código * <span style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
-      category.addEventListener('change',()=>{code.value=nextCode(category.value);lastCategory=category.value;});
+      if(!category.dataset.autoCodeListener){
+        category.dataset.autoCodeListener='1';
+        category.addEventListener('change',()=>apply());
+      }
     }
 
     if(lastCategory!==category.value || !code.value){
