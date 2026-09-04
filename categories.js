@@ -55,18 +55,31 @@
       body.innerHTML = filtered.length ? filtered.map(c => `
         <tr><td><b>${esc(c.code)}</b></td><td>${esc(c.name)}</td>
         <td><span class="badge ${c.active ? 'ok' : 'critical'}">${c.active ? 'Activa' : 'Inactiva'}</span></td>
-        <td><button class="btn btn-secondary cat-edit" data-id="${esc(c.id)}">Editar</button> <button class="btn btn-secondary cat-toggle" data-id="${esc(c.id)}">${c.active ? 'Desactivar' : 'Activar'}</button></td></tr>`).join('') : `<tr><td colspan="4"><div class="empty"><strong>No hay categorías</strong>Crea una nueva categoría para comenzar.</div></td></tr>`;
+        <td><button class="btn btn-secondary cat-edit" data-id="${esc(c.id)}">Editar</button> <button class="btn btn-secondary cat-delete" data-id="${esc(c.id)}">Eliminar</button></td></tr>`).join('') : `<tr><td colspan="4"><div class="empty"><strong>No hay categorías</strong>Crea una nueva categoría para comenzar.</div></td></tr>`;
     };
     content.querySelector('#cat-search').oninput = paint;
     content.querySelector('#cat-new').onclick = () => categoryModal();
     body.onclick = async e => {
       const edit = e.target.closest('.cat-edit');
-      const toggle = e.target.closest('.cat-toggle');
+      const del = e.target.closest('.cat-delete');
       if (edit) { const c = rows.find(x => x.id === edit.dataset.id); if (c) categoryModal(c); }
-      if (toggle) {
-        const c = rows.find(x => x.id === toggle.dataset.id); if (!c) return;
-        const { error } = await sb.from('categories').update({active: !c.active}).eq('id', c.id);
-        if (error) toast(error.message, true); else { toast(c.active ? 'Categoría desactivada' : 'Categoría activada'); renderCategories(); }
+      if (del) {
+        const c = rows.find(x => x.id === del.dataset.id);
+        if (!c) return;
+        if (!confirm(`¿Eliminar la categoría "${c.code} - ${c.name}"?\n\nEsta acción no se puede deshacer.`)) return;
+        const { error } = await sb.from('categories').delete().eq('id', c.id);
+        if (error) {
+          const msg = String(error.message || '');
+          if (/foreign key|violates|referenced|constraint/i.test(msg)) {
+            toast('No se puede eliminar: la categoría está siendo utilizada por artículos.', true);
+          } else {
+            toast(error.message, true);
+          }
+          return;
+        }
+        toast('Categoría eliminada');
+        await renderCategories();
+        if (typeof load === 'function') await load();
       }
     };
     paint();
