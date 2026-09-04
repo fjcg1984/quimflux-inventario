@@ -1,4 +1,4 @@
-/* QUIMFLUX Inventario - presentaciones y conversiones de unidades */
+/* QUIMFLUX Inventario - presentaciones, conversiones y columnas de cantidades */
 (function(){
   const esc = v => String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const fmt = n => Number(n || 0).toLocaleString('es-PE',{maximumFractionDigits:3});
@@ -60,7 +60,7 @@
       if(!i||!select||!help)return;
       const chosen=select.value, p=itemPresentation(i), f=factor(i), base=String(i.unit||'UND').toUpperCase();
       const chosenFactor=chosen===p?f:1; const n=Number(qty.value||0); const baseQty=n*chosenFactor;
-      help.textContent=chosenFactor!==1?`${fmt(n)} ${chosen} = ${fmt(baseQty)} ${base}`:`${fmt(n)} ${chosen} = ${fmt(baseQty)} ${base}`;
+      help.textContent=`${fmt(n)} ${chosen} = ${fmt(baseQty)} ${base}`;
     };
     itemSelect.addEventListener('change',refresh); qty.addEventListener('input',updateHelp); form.querySelector('[name="presentation_choice"]').addEventListener('change',updateHelp);
     refresh();
@@ -80,16 +80,77 @@
     await load();view();toast(`${type==='ENTRY'?'Entrada':'Salida'} registrada: ${fmt(qty)} ${chosen} = ${fmt(baseQty)} ${base}`);
   }
 
+  async function savePresentationFactor(item, input){
+    const value=Number(input.value);
+    if(!Number.isFinite(value)||value<=0){
+      input.value=factor(item);
+      toast('La cantidad por presentación debe ser mayor que 0.',true);
+      return;
+    }
+    const old=factor(item);
+    if(value===old) return;
+    input.disabled=true;
+    const {error}=await sb.from('items').update({units_per_presentation:value,updated_at:new Date().toISOString()}).eq('id',item.id);
+    input.disabled=false;
+    if(error){input.value=old;toast(error.message,true);return;}
+    item.units_per_presentation=value;
+    toast(`${itemPresentation(item)} configurado: 1 ${itemPresentation(item)} = ${fmt(value)} ${String(item.unit||'UND').toUpperCase()}`);
+    renderOverviewPackaging();
+  }
+
+  function renderOverviewPackaging(){
+    if(typeof state==='undefined'||state.view!=='overview')return;
+    const table=document.querySelector('#body')?.closest('table');
+    const body=document.querySelector('#body');
+    if(!table||!body)return;
+    const head=table.querySelector('thead tr');
+    if(!head)return;
+
+    const headers=[...head.children].map(x=>x.textContent.trim());
+    const stockIndex=headers.indexOf('Stock');
+    if(stockIndex<0)return;
+
+    if(!headers.includes('Cantidad por presentación')){
+      head.children[stockIndex].textContent='Cantidad por presentación';
+      const totalTh=document.createElement('th'); totalTh.textContent='Cantidad total';
+      head.insertBefore(totalTh,head.children[stockIndex+1]);
+    }
+
+    const currentRows=[...body.querySelectorAll('tr')];
+    currentRows.forEach(row=>{
+      if(row.querySelector('.empty'))return;
+      const code=row.children[0]?.textContent?.trim();
+      const item=(state.items||[]).find(x=>x.code===code);
+      if(!item)return;
+
+      const oldStockCell=row.children[stockIndex];
+      if(!oldStockCell)return;
+      const totalCell=row.querySelector('.packaging-total');
+      if(!totalCell){
+        const td=document.createElement('td');
+        td.className='packaging-total';
+        row.insertBefore(td,row.children[stockIndex+1]);
+      }
+
+      const p=itemPresentation(item), base=String(item.unit||'UND').toUpperCase(), f=factor(item), stock=Number(item.current_stock||0);
+      oldStockCell.innerHTML=`<div style="display:flex;align-items:center;gap:7px;min-width:145px"><input class="form-control packaging-factor-input" data-item-id="${esc(item.id)}" type="number" min="0.001" step="0.001" value="${esc(f)}" title="Unidades contenidas en 1 ${esc(p)}"><span class="sub" style="white-space:nowrap">${esc(base)} / ${esc(p)}</span></div>`;
+      row.querySelector('.packaging-total').innerHTML=`<b>${fmt(stock)} ${esc(base)}</b>${f!==1?`<div class="sub">≈ ${fmt(stock/f)} ${esc(p)}</div>`:''}`;
+    });
+
+    body.querySelectorAll('.packaging-factor-input').forEach(input=>{
+      if(input.dataset.bound)return;
+      input.dataset.bound='1';
+      input.addEventListener('change',()=>{
+        const item=itemById(input.dataset.itemId);
+        if(item)savePresentationFactor(item,input);
+      });
+      input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}});
+    });
+  }
+
   function enhanceOverview(){
     if(typeof state==='undefined'||state.view!=='overview')return;
-    const body=document.querySelector('#body'); if(!body)return;
-    [...body.querySelectorAll('tr')].forEach(row=>{
-      if(row.querySelector('.packaging-stock'))return;
-      const code=row.querySelector('td:first-child b')?.textContent?.trim(), i=(state.items||[]).find(x=>x.code===code); if(!i||row.querySelector('.empty'))return;
-      const stockCell=row.children[4]; if(!stockCell)return;
-      const f=factor(i), p=itemPresentation(i), u=String(i.unit||'UND').toUpperCase();
-      if(f!==1)stockCell.insertAdjacentHTML('beforeend',`<div class="sub packaging-stock">≈ ${fmt(Number(i.current_stock)/f)} ${esc(p)}</div>`);
-    });
+    renderOverviewPackaging();
   }
 
   function enhanceMovements(){
