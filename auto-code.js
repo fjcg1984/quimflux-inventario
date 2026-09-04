@@ -2,7 +2,17 @@
 (function(){
   let observer=null;
   let currentForm=null;
-  const MANUAL_CATEGORIES=['CRIS','CRI','COPELAS','COP','ESCORIFICADORES','ESC'];
+
+  // ÚNICAMENTE estas tres categorías usan código manual.
+  const MANUAL_CATEGORY_NAMES=new Set(['COPELAS','CRISOLES','ESCORIFICADORES']);
+
+  function normalize(value){
+    return String(value??'')
+      .trim()
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'');
+  }
 
   function categoryInfo(categoryId){
     return (state.categories||[]).find(c=>String(c.id)===String(categoryId));
@@ -10,9 +20,7 @@
 
   function isManualCategory(categoryId){
     const cat=categoryInfo(categoryId);
-    const code=String(cat?.code||'').trim().toUpperCase();
-    const name=String(cat?.name||'').trim().toUpperCase();
-    return MANUAL_CATEGORIES.some(x=>code===x||name===x||name.includes(x));
+    return MANUAL_CATEGORY_NAMES.has(normalize(cat?.name));
   }
 
   function categoryCode(categoryId){
@@ -25,6 +33,7 @@
     const safePrefix=prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const re=new RegExp('^'+safePrefix+'[-_/ ]?(\\d+)$');
     let best=null;
+
     (state.items||[]).forEach(item=>{
       const code=String(item.code||'').trim().toUpperCase();
       const match=code.match(re);
@@ -33,6 +42,7 @@
       if(!Number.isFinite(number))return;
       if(!best||number>best.number)best={number,width:match[1].length};
     });
+
     if(!best)return `${prefix}-001`;
     return `${prefix}-${String(best.number+1).padStart(Math.max(3,best.width),'0')}`;
   }
@@ -55,7 +65,9 @@
 
     const manual=isManualCategory(category.value);
     const label=code.closest('.field')?.querySelector('label');
-    const desiredLabel=manual?'Código *':'Código * <span style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
+    const desiredLabel=manual
+      ? 'Código *'
+      : 'Código * <span style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
 
     if(manual){
       if(code.dataset.autoCode!=='0'){
