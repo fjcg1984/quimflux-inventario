@@ -2,16 +2,10 @@
 (function(){
   let observer=null;
   let currentForm=null;
-
-  // ÚNICAMENTE estas tres categorías usan código manual.
   const MANUAL_CATEGORY_NAMES=new Set(['COPELAS','CRISOLES','ESCORIFICADORES']);
 
   function normalize(value){
-    return String(value??'')
-      .trim()
-      .toUpperCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g,'');
+    return String(value||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   }
 
   function categoryInfo(categoryId){
@@ -24,31 +18,23 @@
   }
 
   function categoryCode(categoryId){
-    return String(categoryInfo(categoryId)?.code||'').trim().toUpperCase();
+    return normalize(categoryInfo(categoryId)?.code);
   }
 
   function nextCode(categoryId){
     const prefix=categoryCode(categoryId);
     if(!prefix)return '';
     const safePrefix=prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    const re=new RegExp('^'+safePrefix+'[-_/ ]?(\\d+)$');
-    let best=null;
-
+    const re=new RegExp('^'+safePrefix+'[-_/ ]?(\\d+)$','i');
+    let bestNumber=0;
+    let bestWidth=3;
     (state.items||[]).forEach(item=>{
-      const code=String(item.code||'').trim().toUpperCase();
-      const match=code.match(re);
+      const match=String(item.code||'').trim().toUpperCase().match(re);
       if(!match)return;
       const number=Number(match[1]);
-      if(!Number.isFinite(number))return;
-      if(!best||number>best.number)best={number,width:match[1].length};
+      if(Number.isFinite(number)&&number>bestNumber){bestNumber=number;bestWidth=match[1].length;}
     });
-
-    if(!best)return `${prefix}-001`;
-    return `${prefix}-${String(best.number+1).padStart(Math.max(3,best.width),'0')}`;
-  }
-
-  function setValueIfNeeded(input,value){
-    if(input.value!==value)input.value=value;
+    return `${prefix}-${String(bestNumber+1).padStart(Math.max(3,bestWidth),'0')}`;
   }
 
   function apply(){
@@ -65,38 +51,31 @@
 
     const manual=isManualCategory(category.value);
     const label=code.closest('.field')?.querySelector('label');
-    const desiredLabel=manual
-      ? 'Código *'
-      : 'Código * <span style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
+    const categoryChanged=form.dataset.lastCategory!==category.value;
 
     if(manual){
-      if(code.dataset.autoCode!=='0'){
-        code.dataset.autoCode='0';
-        code.readOnly=false;
-        code.title='Código manual para esta categoría';
-        code.style.background='';
-        code.style.cursor='';
-      }
-      if(label&&label.innerHTML!==desiredLabel)label.innerHTML=desiredLabel;
-      if(form.dataset.lastCategory!==category.value){
-        setValueIfNeeded(code,'');
-        form.dataset.lastCategory=category.value;
-      }
+      code.readOnly=false;
+      code.dataset.autoCode='0';
+      code.title='Código manual para esta categoría';
+      code.style.background='';
+      code.style.cursor='';
+      if(label)label.textContent='Código *';
+      if(categoryChanged)code.value='';
+      form.dataset.lastCategory=category.value;
       return;
     }
 
-    if(code.dataset.autoCode!=='1'){
-      code.dataset.autoCode='1';
-      code.readOnly=true;
-      code.title='Código generado automáticamente según la categoría';
-      code.style.background='#f3f4f6';
-      code.style.cursor='not-allowed';
+    code.readOnly=true;
+    code.dataset.autoCode='1';
+    code.title='Código generado automáticamente según la categoría';
+    code.style.background='#f3f4f6';
+    code.style.cursor='not-allowed';
+    if(label)label.innerHTML='Código * <span style="font-size:11px;font-weight:500;opacity:.7">(automático)</span>';
+
+    if(categoryChanged||!code.value){
+      code.value=nextCode(category.value);
     }
-    if(label&&label.innerHTML!==desiredLabel)label.innerHTML=desiredLabel;
-    if(form.dataset.lastCategory!==category.value||!code.value){
-      setValueIfNeeded(code,nextCode(category.value));
-      form.dataset.lastCategory=category.value;
-    }
+    form.dataset.lastCategory=category.value;
   }
 
   function start(){
@@ -104,8 +83,10 @@
     if(!modal)return;
     if(observer)observer.disconnect();
     observer=new MutationObserver(()=>{
-      observer.disconnect();
-      try{apply();}finally{observer.observe(modal,{childList:true,subtree:true});}
+      if(observer)observer.disconnect();
+      try{apply();}finally{
+        if(observer)observer.observe(modal,{childList:true,subtree:true});
+      }
     });
     observer.observe(modal,{childList:true,subtree:true});
     apply();
