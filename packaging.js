@@ -7,6 +7,16 @@
   function presentation(i){return String(i?.presentation||i?.unit||'UND').trim().toUpperCase()}
   function factor(i){const n=Number(i?.units_per_presentation);return Number.isFinite(n)&&n>0?n:1}
   function baseUnit(i){return String(i?.unit||'UND').trim().toUpperCase()}
+  function tableNeedsRender(table,rows){
+    const head=table.querySelector('thead tr');
+    if(!head)return false;
+    const headers=[...head.children].map(x=>x.textContent.trim());
+    if(headers.length!==10||headers[4]!=='Cantidad por presentación'||headers[5]!=='Cantidad'||headers[6]!=='Cantidad total'||headers[9]!=='Acciones')return true;
+    const body=table.querySelector('tbody'),trs=[...body.querySelectorAll('tr')];
+    if(rows.length===0)return !(trs.length===1&&trs[0].querySelector('.empty'));
+    if(trs.length!==rows.length)return true;
+    return rows.some((item,idx)=>trs[idx]?.children[0]?.textContent?.trim()!==String(item.code||'').trim());
+  }
   function renderInventoryTable(){
     if(typeof state==='undefined'||state.view!=='overview'||rendering)return;
     const body=document.querySelector('#body'),table=body?.closest('table');if(!body||!table)return;
@@ -14,13 +24,11 @@
     const query=(q?.value||'').trim().toLowerCase(),category=cat?.value||'',status=st?.value||'';
     const rows=(state.items||[]).filter(i=>{const text=`${i.code||''} ${i.name||''} ${i.description||''}`.toLowerCase();return(!query||text.includes(query))&&(!category||String(i.category_id)===String(category))&&(!status||String(i.stock_status)===String(status))});
     const count=document.querySelector('#count');if(count)count.textContent=`${rows.length} artículo${rows.length===1?'':'s'}`;
+    if(!tableNeedsRender(table,rows))return;
     rendering=true;
     const head=table.querySelector('thead tr');
     if(head)head.innerHTML='<th>Código</th><th>Categoría</th><th>Bien</th><th>Unidad de medida</th><th>Cantidad por presentación</th><th>Cantidad</th><th>Cantidad total</th><th>Mínimo</th><th>Estado</th><th>Acciones</th>';
-    body.innerHTML=rows.length?rows.map(i=>{
-      const f=factor(i),p=presentation(i),u=baseUnit(i),stock=Number(i.current_stock||0),qty=f?stock/f:stock;
-      return `<tr><td><b>${esc(i.code)}</b></td><td>${esc(i.category_name)}</td><td>${esc(i.name)}</td><td>${esc(u)}</td><td><div class="presentation-editor"><input class="form-control packaging-factor-input" data-item-id="${esc(i.id)}" type="number" min="0.001" step="0.001" value="${esc(f)}" title="Cantidad de ${esc(u)} que contiene 1 ${esc(p)}"><div class="sub">1 ${esc(p)} = ${fmt(f)} ${esc(u)}</div></div></td><td><b>${fmt(qty)}</b> <span class="sub">${esc(p)}</span></td><td><b>${fmt(qty*f)}</b> <span class="sub">${esc(u)}</span></td><td>${fmt(i.minimum_stock)}</td><td><span class="badge ${({SUFFICIENT:'ok',LOW:'low',CRITICAL:'critical'}[i.stock_status]||'ok')}">${({SUFFICIENT:'Suficiente',LOW:'Stock bajo',CRITICAL:'Reponer'}[i.stock_status]||i.stock_status)}</span></td></tr>`;
-    }).join(''):`<tr><td colspan="10"><div class="empty"><strong>No hay resultados</strong>Ajusta los filtros o crea un artículo nuevo.</div></td></tr>`;
+    body.innerHTML=rows.length?rows.map(i=>{const f=factor(i),p=presentation(i),u=baseUnit(i),stock=Number(i.current_stock||0),qty=f?stock/f:stock;return `<tr><td><b>${esc(i.code)}</b></td><td>${esc(i.category_name)}</td><td>${esc(i.name)}</td><td>${esc(u)}</td><td><div class="presentation-editor"><input class="form-control packaging-factor-input" data-item-id="${esc(i.id)}" type="number" min="0.001" step="0.001" value="${esc(f)}" title="Cantidad de ${esc(u)} que contiene 1 ${esc(p)}"><div class="sub">1 ${esc(p)} = ${fmt(f)} ${esc(u)}</div></div></td><td><b>${fmt(qty)}</b> <span class="sub">${esc(p)}</span></td><td><b>${fmt(qty*f)}</b> <span class="sub">${esc(u)}</span></td><td>${fmt(i.minimum_stock)}</td><td><span class="badge ${({SUFFICIENT:'ok',LOW:'low',CRITICAL:'critical'}[i.stock_status]||'ok')}">${({SUFFICIENT:'Suficiente',LOW:'Stock bajo',CRITICAL:'Reponer'}[i.stock_status]||i.stock_status)}</span></td></tr>`}).join(''):`<tr><td colspan="10"><div class="empty"><strong>No hay resultados</strong>Ajusta los filtros o crea un artículo nuevo.</div></td></tr>`;
     rendering=false;bindFactorInputs();
   }
   function bindFactorInputs(){document.querySelectorAll('.packaging-factor-input').forEach(input=>{if(input.dataset.bound)return;input.dataset.bound='1';input.addEventListener('change',async()=>{const item=itemById(input.dataset.itemId);if(item)await saveFactor(item,input)});input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}})})}
