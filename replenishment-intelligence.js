@@ -4,7 +4,6 @@
   const $=s=>document.querySelector(s);
   const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const fmt=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:2});
-  const lima=iso=>new Date(iso).toLocaleString('es-PE',{timeZone:'America/Lima'});
   function category(id){return (state.categories||[]).find(c=>String(c.id)===String(id))||null}
   function type(id){return category(id)?.control_type==='CONTROL'?'CONTROL':'CONSUMO'}
   function wait(){
@@ -27,8 +26,7 @@
   function enhance(){
     if(state.view!=='dashboard')return;
     const old=[...document.querySelectorAll('.panel')].find(p=>p.querySelector('h2')?.textContent.trim()==='Reposición inteligente');
-    if(!old)return;
-    if(old.dataset.riEnhanced==='1')return;
+    if(!old||old.dataset.riEnhanced==='1')return;
     old.dataset.riEnhanced='1';
     render(old).catch(err=>{old.dataset.riEnhanced='';old.innerHTML='<div class="empty"><strong>No se pudo calcular reposición</strong>'+esc(err.message)+'</div>'});
   }
@@ -43,7 +41,7 @@
     ['ri-period','ri-category','ri-priority','ri-search'].forEach(id=>$('#'+id)?.addEventListener('input',paint));
     ['ri-period','ri-category','ri-priority'].forEach(id=>$('#'+id)?.addEventListener('change',paint));
     paint();
-    async function refresh(){try{cache.loadedAt=0;await loadMovements();paint()}catch(e){toast?.(e.message,true)}}
+    async function refresh(){try{cache.loadedAt=0;await loadMovements();paint()}catch(e){if(typeof toast==='function')toast(e.message,true)}}
     const refreshBtn=document.createElement('button');refreshBtn.className='btn btn-secondary ri-refresh';refreshBtn.textContent='↻ Actualizar datos';refreshBtn.onclick=refresh;panel.querySelector('.panel-head').appendChild(refreshBtn);
     function paint(){
       const days=Number($('#ri-period')?.value||30), catId=$('#ri-category')?.value||'', priority=$('#ri-priority')?.value||'', q=($('#ri-search')?.value||'').trim().toLowerCase();
