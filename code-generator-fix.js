@@ -1,7 +1,7 @@
 (() => {
   const codeCache = new Map();
   const normalize = value => String(value || '').trim().toUpperCase();
-  const categoryById = id => (window.state?.categories || []).find(c => String(c.id) === String(id));
+  const categoryById = id => (state?.categories || []).find(c => String(c.id) === String(id));
 
   function prefixRegex(prefix) {
     const safe = normalize(prefix).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -11,7 +11,7 @@
   async function refreshCodes(prefix) {
     prefix = normalize(prefix);
     if (!prefix) return [];
-    const { data, error } = await window.sb
+    const { data, error } = await sb
       .from('items')
       .select('code')
       .ilike('code', `${prefix}-%`);
@@ -23,7 +23,7 @@
 
   function fallbackCodes(prefix) {
     const re = prefixRegex(prefix);
-    return (window.state?.items || [])
+    return (state?.items || [])
       .map(item => normalize(item.code))
       .filter(code => re.test(code));
   }
@@ -101,12 +101,4 @@
         if (typeof toast === 'function') toast('No se pudo verificar el último código. Revisa antes de guardar.', true);
       });
   };
-
-  // En cada apertura/cambio de categoría se consulta public.items, incluyendo
-  // artículos inactivos, porque la columna code es UNIQUE aunque active=false.
-  const wait = setInterval(() => {
-    if (window.state?.categories?.length && window.sb && window.nextAutomaticCode === window.nextAutomaticCode) {
-      clearInterval(wait);
-    }
-  }, 100);
 })();
