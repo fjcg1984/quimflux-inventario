@@ -27,7 +27,7 @@
     enrichLocations().then(()=>{
       if(state.view!=='overview'){running=false;return;}
       renderOverview(table,body);
-      running=false;
+      setTimeout(()=>{ running=false; },0);
     });
   }
 
