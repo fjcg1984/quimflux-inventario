@@ -1,0 +1,32 @@
+/* QUIMFLUX Inventario - corrección de tabla de Vista general */
+/* phase1-control.js heredado agrega una segunda columna Ficha. La vista 2.0 ya contiene la Ficha correcta. */
+table:has(#body) thead th[data-phase1],
+table:has(#body) tbody td[data-item-card]{display:none!important}
+
+/* La tabla conserva todas sus columnas y usa desplazamiento horizontal cuando el ancho disponible no alcanza. */
+.panel:has(#body) .table-wrap{overflow-x:auto!important;overflow-y:hidden!important;width:100%;max-width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:auto}
+.panel:has(#body) table{min-width:1450px!important;width:100%;table-layout:auto!important}
+
+/* Anchos controlados para evitar que Estado, Ficha y Acciones se aplasten. */
+table:has(#body) th:nth-child(1),table:has(#body) td:nth-child(1){width:90px;min-width:90px}
+table:has(#body) th:nth-child(2),table:has(#body) td:nth-child(2){width:145px;min-width:145px}
+table:has(#body) th:nth-child(3),table:has(#body) td:nth-child(3){width:220px;min-width:220px}
+table:has(#body) th:nth-child(4),table:has(#body) td:nth-child(4){width:190px;min-width:170px}
+table:has(#body) th:nth-child(5),table:has(#body) td:nth-child(5){width:180px;min-width:160px}
+table:has(#body) th:nth-child(6),table:has(#body) td:nth-child(6){width:80px;min-width:75px}
+table:has(#body) th:nth-child(7),table:has(#body) td:nth-child(7){width:85px;min-width:75px}
+table:has(#body) th:nth-child(8),table:has(#body) td:nth-child(8){width:85px;min-width:75px}
+table:has(#body) th:nth-child(9),table:has(#body) td:nth-child(9){width:110px;min-width:110px;white-space:nowrap}
+table:has(#body) th:nth-child(10),table:has(#body) td:nth-child(10){width:105px;min-width:105px;white-space:nowrap;text-align:center}
+table:has(#body) th:nth-child(11),table:has(#body) td:nth-child(11){width:230px;min-width:230px}
+
+table:has(#body) td:nth-child(2),table:has(#body) td:nth-child(3),table:has(#body) td:nth-child(4),table:has(#body) td:nth-child(5){white-space:normal;overflow-wrap:anywhere}
+table:has(#body) td:nth-child(9) .badge{white-space:nowrap}
+table:has(#body) td:nth-child(10) .btn{white-space:nowrap;padding:9px 13px}
+table:has(#body) td:nth-child(11){white-space:nowrap}
+table:has(#body) td:nth-child(11)>div{display:flex!important;gap:6px!important;flex-wrap:wrap!important;align-items:center}
+
+@media(max-width:900px){
+  .panel:has(#body) .table-wrap{border-bottom:1px solid var(--line)}
+  .panel:has(#body) table{min-width:1250px!important}
+}
