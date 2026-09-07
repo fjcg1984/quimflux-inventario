@@ -22,12 +22,17 @@
     if(running||state?.view!=='overview')return;
     const table=document.querySelector('#body')?.closest('table');
     const body=document.querySelector('#body');
-    if(!table||!body)return;
+    if(!table||!body||table.dataset.vista20Rendered==='1')return;
     running=true;
     enrichLocations().then(()=>{
       if(state.view!=='overview'){running=false;return;}
+      if(table.dataset.vista20Rendered==='1'){running=false;return;}
+      table.dataset.vista20Rendered='1';
       renderOverview(table,body);
-      setTimeout(()=>{ running=false; },0);
+      running=false;
+    }).catch(err=>{
+      console.error('[QUIMFLUX vista]',err);
+      running=false;
     });
   }
 
@@ -74,7 +79,6 @@
     const movements=movs||[];
     const lastEntry=movements.find(m=>m.movement_type==='ENTRY');
     const lastExit=movements.find(m=>m.movement_type==='EXIT');
-    const canLocate=window.quimfluxPhase1?.getRole?['ADMIN','SUPERVISOR'].includes(window.quimfluxPhase1.getRole()):true;
     $('#modal-content').innerHTML=`<h2>Ficha completa del artículo</h2><p class="modal-sub">Consulta integral del bien. El stock se muestra desde el inventario y no se modifica desde esta ficha.</p>
       <div class="cards"><div class="card"><div class="label">Código</div><div class="value" style="font-size:20px">${esc(item.code)}</div></div><div class="card"><div class="label">Stock actual</div><div class="value" style="font-size:20px">${fmtLocal(item.current_stock)} ${esc(item.unit)}</div></div><div class="card"><div class="label">Estado</div><div class="value" style="font-size:18px"><span class="badge ${statusClass(item.stock_status)}">${statusLabel(item.stock_status)}</span></div></div></div>
       <div class="panel"><div class="panel-head"><h2>${esc(item.name)}</h2><span class="badge">${esc(item.category_name||categoryName(item.category_id)||'')}</span></div><div class="form-grid">
