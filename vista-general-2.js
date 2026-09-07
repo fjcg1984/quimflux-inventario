@@ -5,6 +5,7 @@
   const fmtLocal=n=>Number(n||0).toLocaleString('es-PE',{maximumFractionDigits:3});
   const statusLabel=s=>({SUFFICIENT:'Suficiente',LOW:'Stock bajo',CRITICAL:'Reponer'}[s]||s||'—');
   const statusClass=s=>({SUFFICIENT:'ok',LOW:'low',CRITICAL:'critical'}[s]||'ok');
+  const normalize=v=>String(v??'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const categoryName=id=>(state.categories||[]).find(c=>String(c.id)===String(id))?.name||'';
   const locationText=i=>[i.warehouse,i.zone,i.shelf,i.level].filter(Boolean).join(' / ')||'Sin ubicación';
   const displayDate=iso=>iso?new Date(iso).toLocaleString('es-PE',{timeZone:'America/Lima'}):'—';
@@ -38,39 +39,79 @@
 
   function renderOverview(table,body){
     const oldToolbar=document.querySelector('.toolbar');
-    if(oldToolbar&&!oldToolbar.dataset.vista20){
-      oldToolbar.dataset.vista20='1';
-      const loc=document.createElement('select');
-      loc.id='loc-filter'; loc.className='control';
-      loc.innerHTML='<option value="">Todas las ubicaciones</option><option value="located">Con ubicación</option><option value="unlocated">Sin ubicación</option>';
+    let loc=document.querySelector('#loc-filter');
+    if(oldToolbar&&!loc){
+      loc=document.createElement('select');
+      loc.id='loc-filter';
+      loc.className='control';
       oldToolbar.insertBefore(loc,oldToolbar.querySelector('#new')||null);
-      loc.addEventListener('change',paint);
     }
+
+    // La ubicación se construye con los datos reales disponibles para que el filtro
+    // pueda seleccionar una ubicación concreta, además de con/sin ubicación.
+    if(loc){
+      const locations=[...new Set((state.items||[]).map(locationText))].sort((a,b)=>a.localeCompare(b,'es'));
+      loc.innerHTML='<option value="">Todas las ubicaciones</option><option value="__located__">Con ubicación</option><option value="__unlocated__">Sin ubicación</option>'+locations.filter(x=>x!=='Sin ubicación').map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    }
+
     const head=table.querySelector('thead tr');
     head.innerHTML='<th>Código</th><th>Categoría</th><th>Bien</th><th>Descripción</th><th>Ubicación</th><th>Unidad</th><th>Stock</th><th>Mínimo</th><th>Estado</th><th>Ficha</th>';
     body.innerHTML='';
-    paint();
 
     function paint(){
       const q=(document.querySelector('#q')?.value||'').trim().toLowerCase();
       const cat=document.querySelector('#cat')?.value||'';
       const st=document.querySelector('#st')?.value||'';
       const lf=document.querySelector('#loc-filter')?.value||'';
+      const selectedCategory=(state.categories||[]).find(c=>String(c.id)===String(cat));
+      const selectedCategoryName=normalize(selectedCategory?.name);
+      const selectedCategoryCode=normalize(selectedCategory?.code);
+
       const rows=state.items.filter(i=>{
-        const text=`${i.code||''} ${i.name||''} ${i.description||''} ${i.category_name||''} ${locationText(i)}`.toLowerCase();
+        const text=`${i.code||''} ${i.name||''} ${i.description||''} ${i.category_name||''} ${i.category_code||''} ${locationText(i)}`.toLowerCase();
+        const itemCategoryId=String(i.category_id||'');
+        const itemCategoryName=normalize(i.category_name||categoryName(i.category_id));
+        const itemCategoryCode=normalize(i.category_code||'');
+        const categoryMatches=!cat ||
+          itemCategoryId===String(cat) ||
+          (selectedCategoryName && itemCategoryName===selectedCategoryName) ||
+          (selectedCategoryCode && itemCategoryCode===selectedCategoryCode);
         const located=!!(i.warehouse||i.zone||i.shelf||i.level);
-        return (!q||text.includes(q))&&(!cat||String(i.category_id||'')===String(cat))&&(!st||i.stock_status===st)&&(!lf||(lf==='located'?located:!located));
+        const location=locationText(i);
+        const locationMatches=!lf ||
+          (lf==='__located__'&&located) ||
+          (lf==='__unlocated__'&&!located) ||
+          (lf!=='__located__'&&lf!=='__unlocated__'&&location===lf);
+        return (!q||text.includes(q))&&categoryMatches&&(!st||String(i.stock_status||'')===String(st))&&locationMatches;
       });
-      const count=document.querySelector('#count'); if(count)count.textContent=`${rows.length} artículo${rows.length===1?'':'s'}`;
+
+      const count=document.querySelector('#count');
+      if(count)count.textContent=`${rows.length} artículo${rows.length===1?'':'s'}`;
       body.innerHTML=rows.length?rows.map(i=>{
-        const loc=locationText(i);
-        return `<tr><td><b>${esc(i.code)}</b></td><td>${esc(i.category_name||categoryName(i.category_id)||'—')}</td><td><b>${esc(i.name)}</b></td><td data-description-cell="1">${esc(i.description||'—')}</td><td><span class="sub">${esc(loc)}</span></td><td>${esc(i.unit||'UND')}</td><td><b>${fmtLocal(i.current_stock)}</b></td><td>${fmtLocal(i.minimum_stock)}</td><td><span class="badge ${statusClass(i.stock_status)}">${statusLabel(i.stock_status)}</span></td><td><button type="button" class="btn btn-secondary btn-sm js-vista-ficha">Ver ficha</button></td></tr>`;
+        const locText=locationText(i);
+        return `<tr><td><b>${esc(i.code)}</b></td><td>${esc(i.category_name||categoryName(i.category_id)||'—')}</td><td><b>${esc(i.name)}</b></td><td data-description-cell="1">${esc(i.description||'—')}</td><td><span class="sub">${esc(locText)}</span></td><td>${esc(i.unit||'UND')}</td><td><b>${fmtLocal(i.current_stock)}</b></td><td>${fmtLocal(i.minimum_stock)}</td><td><span class="badge ${statusClass(i.stock_status)}">${statusLabel(i.stock_status)}</span></td><td><button type="button" class="btn btn-secondary btn-sm js-vista-ficha">Ver ficha</button></td></tr>`;
       }).join(''):`<tr><td colspan="10"><div class="empty"><strong>No hay resultados</strong>Ajusta los filtros de búsqueda.</div></td></tr>`;
+
       body.querySelectorAll('.js-vista-ficha').forEach(btn=>{
         const code=btn.closest('tr')?.querySelector('td:first-child b')?.textContent.trim();
-        const item=state.items.find(i=>i.code===code); if(item)btn.onclick=()=>showFullItem(item);
+        const item=state.items.find(i=>i.code===code);
+        if(item)btn.onclick=()=>showFullItem(item);
       });
     }
+
+    // Sustituimos los handlers del render original de app.js. Antes solo loc-filter
+    // llamaba a este paint; q/cat/st seguían ejecutando el paint antiguo y devolvían
+    // la tabla a su estado anterior. Con estos handlers los cuatro filtros comparten
+    // exactamente la misma fuente de datos y pueden combinarse.
+    const qEl=document.querySelector('#q');
+    const catEl=document.querySelector('#cat');
+    const stEl=document.querySelector('#st');
+    if(qEl){qEl.oninput=paint;qEl.onchange=paint;}
+    if(catEl){catEl.onchange=paint;catEl.oninput=paint;}
+    if(stEl){stEl.onchange=paint;stEl.oninput=paint;}
+    if(loc){loc.onchange=paint;loc.oninput=paint;}
+
+    paint();
   }
 
   async function showFullItem(item){
